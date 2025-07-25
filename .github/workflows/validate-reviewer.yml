@@ -7,7 +7,7 @@ on:
       - main
     types: [opened, edited, reopened, synchronize]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, edited, dismissed]
 
 jobs:
   validate-reviewer:
