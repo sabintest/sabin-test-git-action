@@ -9,6 +9,7 @@ on:
 
 jobs:
   validate-reviewer:
+    name: Validate Reviewer Team on develop or master
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -76,19 +77,18 @@ jobs:
             core.setFailed(`❌ PR to '${targetBranch}' must be approved by at least one member of ${teamNote}.`);
           } else {
             console.log(`✅ Approved by an authorized team member for '${targetBranch}' branch.`);
+          }
 
-jobs:
   set-branch-protection:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'develop'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      administration: write
 
     steps:
       - uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.ADMIN_PAT }}
+          github-token: ${{ secrets.PR_REVIEW_ACTION }}
           script: |
             const branches = [
               {
