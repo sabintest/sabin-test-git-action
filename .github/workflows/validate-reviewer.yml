@@ -9,6 +9,7 @@ on:
 
 jobs:
   validate-reviewer:
+    name: Validate Reviewer Team on develop or master
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
