@@ -76,6 +76,7 @@ jobs:
             core.setFailed(`❌ PR to '${targetBranch}' must be approved by at least one member of ${teamNote}.`);
           } else {
             console.log(`✅ Approved by an authorized team member for '${targetBranch}' branch.`);
+          }
 
   set-branch-protection:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
