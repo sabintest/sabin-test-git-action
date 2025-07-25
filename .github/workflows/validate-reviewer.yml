@@ -5,26 +5,27 @@ on:
     branches:
       - develop
       - main
-    types: [submitted, edited, reopened, synchronize]
+    types: [opened, edited, reopened, synchronize]
 
 jobs:
   validate-reviewer:
+    name: Validate Reviewer Team on develop or master
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
       contents: read
 
     steps:
-    - name: Use GitHub Script with PAT
+    - name: Use GitHub Script to Validate Reviewer
       uses: actions/github-script@v7
       with:
-        github-token: ${{ secrets.GH_READ_ORG_TOKEN }}  # <- Use your PAT here
+        github-token: ${{ secrets.PR_REVIEW_ACTION }}
         script: |
           const prNumber = context.payload.pull_request.number;
           const repo = context.repo;
           const targetBranch = context.payload.pull_request.base.ref;
 
-          const octokit = github;  // Already authenticated with PAT
+          const octokit = github;
           const reviews = await octokit.rest.pulls.listReviews({
             owner: repo.owner,
             repo: repo.repo,
@@ -55,10 +56,10 @@ jobs:
           }
 
           if (targetBranch === 'main') {
-            await loadTeamMembers('release'); // use actual slug
+            await loadTeamMembers('release');
           } else if (targetBranch === 'develop') {
-            await loadTeamMembers('release'); // use actual slug
-            await loadTeamMembers('review');  // use actual slug
+            await loadTeamMembers('release');
+            await loadTeamMembers('review');
           } else {
             console.log(`Skipping validation for branch: ${targetBranch}`);
             return;
@@ -77,3 +78,70 @@ jobs:
           } else {
             console.log(`✅ Approved by an authorized team member for '${targetBranch}' branch.`);
           }
+
+  set-branch-protection:
+    if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'develop'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PR_REVIEW_ACTION }}
+          script: |
+            const branches = [
+              {
+                name: 'develop',
+                requiredApprovingReviewCount: 1,
+                pushRestrictions: ['review', 'release'],
+              },
+              {
+                name: 'main',
+                requiredApprovingReviewCount: 1,
+                pushRestrictions: ['release'],
+              }
+            ];
+
+            const org = context.repo.owner;
+            const repo = context.repo.repo;
+
+            for (const branchConfig of branches) {
+              const { name: branch, requiredApprovingReviewCount, pushRestrictions } = branchConfig;
+
+              let teams = [];
+              for (const team of pushRestrictions) {
+                try {
+                  const teamData = await github.rest.teams.getByName({
+                    org,
+                    team_slug: team
+                  });
+                  teams.push(teamData.data.slug);
+                } catch (error) {
+                  core.setFailed(`❌ Failed to find team '${team}' in org '${org}': ${error.message}`);
+                  return;
+                }
+              }
+
+              await github.rest.repos.updateBranchProtection({
+                owner: org,
+                repo,
+                branch,
+                required_status_checks: {
+                  strict: true,
+                  contexts: ['Validate Reviewer Team on develop or master']
+                },
+                enforce_admins: true,
+                required_pull_request_reviews: {
+                  required_approving_review_count: requiredApprovingReviewCount
+                },
+                restrictions: {
+                  users: [],
+                  teams: teams
+                },
+                allow_force_pushes: false,
+                allow_deletions: false
+              });
+
+              console.log(`✅ Applied protection to '${branch}' with teams: ${teams.join(', ')}`);
+            }
