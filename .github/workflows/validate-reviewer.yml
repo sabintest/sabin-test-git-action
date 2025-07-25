@@ -79,7 +79,7 @@ jobs:
           }
 
   set-branch-protection:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'develop'
     runs-on: ubuntu-latest
     permissions:
       contents: write
