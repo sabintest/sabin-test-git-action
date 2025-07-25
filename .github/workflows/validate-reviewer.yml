@@ -1,0 +1,73 @@
+name: Validate Reviewer Team on develop or master
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    types: [submitted, edited, reopened, synchronize]
+
+jobs:
+  validate-reviewer:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+
+    steps:
+    - name: Check reviewers
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const prNumber = context.payload.pull_request.number;
+          const repo = context.repo;
+          const targetBranch = context.payload.pull_request.base.ref;
+
+          const reviews = await github.rest.pulls.listReviews({
+            owner: repo.owner,
+            repo: repo.repo,
+            pull_number: prNumber
+          });
+
+          const uniqueApprovers = new Set(
+            reviews.data
+              .filter(r => r.state === 'APPROVED')
+              .map(r => r.user.login)
+          );
+
+          const teamMembers = new Set();
+
+          async function loadTeamMembers(teamSlug) {
+            const members = await github.paginate(
+              github.rest.teams.listMembersInOrg,
+              {
+                org: repo.owner,
+                team_slug: teamSlug
+              }
+            );
+            members.forEach(member => teamMembers.add(member.login));
+          }
+
+          if (targetBranch === 'main') {
+            await loadTeamMembers('release');
+          } else if (targetBranch === 'develop') {
+            await loadTeamMembers('release');
+            await loadTeamMembers('review');
+          } else {
+            console.log(`Skipping validation for branch: ${targetBranch}`);
+            return;
+          }
+
+          const approverFound = [...uniqueApprovers].some(user =>
+            teamMembers.has(user)
+          );
+
+          if (!approverFound) {
+            const teamNote = targetBranch === 'main'
+              ? '@sabintest/release'
+              : '@sabintest/review or @sabintest/release';
+
+            core.setFailed(`❌ PR to '${targetBranch}' must be approved by at least one member of ${teamNote}.`);
+          } else {
+            console.log(`✅ Approved by an authorized team member for '${targetBranch}' branch.`);
+          }
