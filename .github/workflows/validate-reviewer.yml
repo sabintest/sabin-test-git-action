@@ -15,15 +15,17 @@ jobs:
       contents: read
 
     steps:
-    - name: Check reviewers
+    - name: Use GitHub Script with PAT
       uses: actions/github-script@v7
       with:
+        github-token: ${{ secrets.PR_REVIEW_ACTION }}  # <- Use your PAT here
         script: |
           const prNumber = context.payload.pull_request.number;
           const repo = context.repo;
           const targetBranch = context.payload.pull_request.base.ref;
 
-          const reviews = await github.rest.pulls.listReviews({
+          const octokit = github;  // Already authenticated with PAT
+          const reviews = await octokit.rest.pulls.listReviews({
             owner: repo.owner,
             repo: repo.repo,
             pull_number: prNumber
@@ -38,21 +40,25 @@ jobs:
           const teamMembers = new Set();
 
           async function loadTeamMembers(teamSlug) {
-            const members = await github.paginate(
-              github.rest.teams.listMembersInOrg,
-              {
-                org: repo.owner,
-                team_slug: teamSlug
-              }
-            );
-            members.forEach(member => teamMembers.add(member.login));
+            try {
+              const members = await octokit.paginate(
+                octokit.rest.teams.listMembersInOrg,
+                {
+                  org: repo.owner,
+                  team_slug: teamSlug
+                }
+              );
+              members.forEach(member => teamMembers.add(member.login));
+            } catch (error) {
+              core.setFailed(`🚨 Failed to load team '${teamSlug}': ${error.message}`);
+            }
           }
 
           if (targetBranch === 'main') {
-            await loadTeamMembers('release');
+            await loadTeamMembers('release'); // use actual slug
           } else if (targetBranch === 'develop') {
-            await loadTeamMembers('release');
-            await loadTeamMembers('review');
+            await loadTeamMembers('release'); // use actual slug
+            await loadTeamMembers('review');  // use actual slug
           } else {
             console.log(`Skipping validation for branch: ${targetBranch}`);
             return;
