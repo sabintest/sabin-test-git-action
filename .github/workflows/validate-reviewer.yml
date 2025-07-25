@@ -77,7 +77,6 @@ jobs:
           } else {
             console.log(`✅ Approved by an authorized team member for '${targetBranch}' branch.`);
 
-jobs:
   set-branch-protection:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
